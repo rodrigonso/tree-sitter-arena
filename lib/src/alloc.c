@@ -42,24 +42,21 @@ TS_PUBLIC TSAllocator ts_builtin_allocator = {
 
 // ---------------------------------------------------------------------------
 // Legacy global function pointers for TREE_SITTER_REUSE_ALLOCATOR scanners.
-// These delegate to ts_builtin_allocator.
 // ---------------------------------------------------------------------------
 
 static void *ts_compat_malloc(size_t size) {
-  return ts_builtin_allocator.malloc(size, ts_builtin_allocator.ctx);
+  return ts_libc_malloc(size, NULL);
 }
 
 static void *ts_compat_calloc(size_t count, size_t size) {
-  return ts_builtin_allocator.calloc(count, size, ts_builtin_allocator.ctx);
+  return ts_libc_calloc(count, size, NULL);
 }
 
 static void ts_compat_free(void *ptr) {
-  ts_builtin_allocator.free(ptr, ts_builtin_allocator.ctx);
+  ts_libc_free(ptr, NULL);
 }
 
 // Legacy realloc stub for external scanners that may still call ts_realloc.
-// The core library no longer uses realloc, but scanner code compiled with
-// TREE_SITTER_REUSE_ALLOCATOR will resolve ts_current_realloc at link time.
 static void *ts_compat_realloc(void *ptr, size_t size) {
   return realloc(ptr, size);
 }
@@ -68,6 +65,26 @@ TS_PUBLIC void *(*ts_current_malloc)(size_t) = ts_compat_malloc;
 TS_PUBLIC void *(*ts_current_calloc)(size_t, size_t) = ts_compat_calloc;
 TS_PUBLIC void *(*ts_current_realloc)(void *, size_t) = ts_compat_realloc;
 TS_PUBLIC void (*ts_current_free)(void *) = ts_compat_free;
+
+// ---------------------------------------------------------------------------
+// Adapters: bridge legacy function pointers (no ctx) into TSAllocator (with ctx).
+// Used by ts_set_allocator to update ts_builtin_allocator.
+// ---------------------------------------------------------------------------
+
+static void *ts_adapted_malloc(size_t size, void *ctx) {
+  (void)ctx;
+  return ts_current_malloc(size);
+}
+
+static void *ts_adapted_calloc(size_t count, size_t size, void *ctx) {
+  (void)ctx;
+  return ts_current_calloc(count, size);
+}
+
+static void ts_adapted_free(void *ptr, void *ctx) {
+  (void)ctx;
+  ts_current_free(ptr);
+}
 
 // ---------------------------------------------------------------------------
 // Public API
@@ -83,11 +100,24 @@ void ts_set_allocator(
   void *(*new_realloc)(void *ptr, size_t size),
   void (*new_free)(void *ptr)
 ) {
-  (void)new_realloc; // realloc is no longer used internally
-
   // Update legacy function pointers (for external scanners).
   ts_current_malloc = new_malloc ? new_malloc : ts_compat_malloc;
   ts_current_calloc = new_calloc ? new_calloc : ts_compat_calloc;
+  ts_current_realloc = new_realloc ? new_realloc : ts_compat_realloc;
   ts_current_free = new_free ? new_free : ts_compat_free;
+
+  // Also update ts_builtin_allocator so ts_parser_new() etc. use the new
+  // functions. The adapted_* functions delegate to ts_current_*.
+  if (new_malloc || new_calloc || new_free) {
+    ts_builtin_allocator.malloc = ts_adapted_malloc;
+    ts_builtin_allocator.calloc = ts_adapted_calloc;
+    ts_builtin_allocator.free = ts_adapted_free;
+    ts_builtin_allocator.ctx = NULL;
+  } else {
+    ts_builtin_allocator.malloc = ts_libc_malloc;
+    ts_builtin_allocator.calloc = ts_libc_calloc;
+    ts_builtin_allocator.free = ts_libc_free;
+    ts_builtin_allocator.ctx = NULL;
+  }
 }
 
