@@ -2007,7 +2007,7 @@ void ts_parser_delete(TSParser *self) {
     self->old_tree = NULL_SUBTREE;
   }
   ts_wasm_store_delete(self->wasm_store);
-  ts_lexer_delete(&self->allocator, &self->lexer);
+  ts_lexer_delete(&self->lexer, &self->allocator);
   ts_parser__set_cached_token(self, 0, NULL_SUBTREE, NULL_SUBTREE);
   ts_subtree_pool_delete(&self->allocator, &self->tree_pool);
   reusable_node_delete(&self->allocator, &self->reusable_node);
@@ -2074,7 +2074,7 @@ bool ts_parser_set_included_ranges(
   const TSRange *ranges,
   uint32_t count
 ) {
-  return ts_lexer_set_included_ranges(&self->allocator, &self->lexer, ranges, count);
+  return ts_lexer_set_included_ranges(&self->lexer, &self->allocator, ranges, count);
 }
 
 const TSRange *ts_parser_included_ranges(const TSParser *self, uint32_t *count) {

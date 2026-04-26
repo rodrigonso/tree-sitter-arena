@@ -36,6 +36,7 @@ TS_PUBLIC extern TSAllocator ts_builtin_allocator;
 // compat with external scanners. These are wrappers around ts_builtin_allocator.
 TS_PUBLIC extern void *(*ts_current_malloc)(size_t size);
 TS_PUBLIC extern void *(*ts_current_calloc)(size_t count, size_t size);
+TS_PUBLIC extern void *(*ts_current_realloc)(void *ptr, size_t size);
 TS_PUBLIC extern void (*ts_current_free)(void *ptr);
 
 // Legacy macros for external scanners and backward compat code.
@@ -48,6 +49,9 @@ TS_PUBLIC extern void (*ts_current_free)(void *ptr);
 #endif
 #ifndef ts_free
 #define ts_free    ts_current_free
+#endif
+#ifndef ts_realloc
+#define ts_realloc ts_current_realloc
 #endif
 
 #ifdef __cplusplus

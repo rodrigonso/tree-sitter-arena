@@ -470,6 +470,7 @@ bool ts_lexer_set_included_ranges(
   }
 
   size_t size = count * sizeof(TSRange);
+  ts_alloc_free(alloc, self->included_ranges);
   self->included_ranges = ts_alloc_malloc(alloc, size);
   memcpy(self->included_ranges, ranges, size);
   self->included_range_count = count;

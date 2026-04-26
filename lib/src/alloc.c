@@ -57,8 +57,16 @@ static void ts_compat_free(void *ptr) {
   ts_builtin_allocator.free(ptr, ts_builtin_allocator.ctx);
 }
 
+// Legacy realloc stub for external scanners that may still call ts_realloc.
+// The core library no longer uses realloc, but scanner code compiled with
+// TREE_SITTER_REUSE_ALLOCATOR will resolve ts_current_realloc at link time.
+static void *ts_compat_realloc(void *ptr, size_t size) {
+  return realloc(ptr, size);
+}
+
 TS_PUBLIC void *(*ts_current_malloc)(size_t) = ts_compat_malloc;
 TS_PUBLIC void *(*ts_current_calloc)(size_t, size_t) = ts_compat_calloc;
+TS_PUBLIC void *(*ts_current_realloc)(void *, size_t) = ts_compat_realloc;
 TS_PUBLIC void (*ts_current_free)(void *) = ts_compat_free;
 
 // ---------------------------------------------------------------------------

@@ -220,6 +220,7 @@ static inline void *_array__reserve(const TSAllocator *alloc, void *contents, ui
       size_t new_size = new_capacity * element_size;
       new_contents = ts_alloc_malloc(alloc, new_size);
       memcpy(new_contents, contents, old_size);
+      ts_alloc_free(alloc, contents);
     } else {
       new_contents = ts_alloc_malloc(alloc, new_capacity * element_size);
     }
