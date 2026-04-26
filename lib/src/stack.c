@@ -9,7 +9,7 @@
 #include <stdio.h>
 
 #define MAX_LINK_COUNT 8
-#define MAX_NODE_POOL_SIZE UINT32_MAX
+#define MAX_NODE_POOL_SIZE 65536
 #define MAX_ITERATOR_COUNT 64
 
 #if defined _WIN32 && !defined __GNUC__
