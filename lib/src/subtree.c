@@ -496,6 +496,7 @@ MutableSubtree ts_subtree_new_node(
     Subtree *new_contents = ts_alloc_malloc(alloc, new_byte_size);
     if (children->contents) {
       memcpy(new_contents, children->contents, old_byte_size);
+      ts_alloc_free(alloc, children->contents);
     }
     children->contents = new_contents;
     children->capacity = (uint32_t)(new_byte_size / sizeof(Subtree));
