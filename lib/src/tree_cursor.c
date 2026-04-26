@@ -181,7 +181,9 @@ void ts_tree_cursor_init(TreeCursor *self, TSNode node) {
 
 void ts_tree_cursor_delete(TSTreeCursor *_self) {
   TreeCursor *self = (TreeCursor *)_self;
-  array_delete(&self->tree->allocator, &self->stack);
+  if (self->tree) {
+    array_delete(&self->tree->allocator, &self->stack);
+  }
 }
 
 // TSTreeCursor - walking the tree

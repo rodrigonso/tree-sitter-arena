@@ -3040,23 +3040,24 @@ TSQuery *ts_query_new(
 
 void ts_query_delete(TSQuery *self) {
   if (self) {
-    array_delete(&self->allocator, &self->steps);
-    array_delete(&self->allocator, &self->pattern_map);
-    array_delete(&self->allocator, &self->predicate_steps);
-    array_delete(&self->allocator, &self->patterns);
-    array_delete(&self->allocator, &self->step_offsets);
-    array_delete(&self->allocator, &self->string_buffer);
-    array_delete(&self->allocator, &self->negated_fields);
-    array_delete(&self->allocator, &self->repeat_symbols_with_rootless_patterns);
+    TSAllocator alloc = self->allocator;
+    array_delete(&alloc, &self->steps);
+    array_delete(&alloc, &self->pattern_map);
+    array_delete(&alloc, &self->predicate_steps);
+    array_delete(&alloc, &self->patterns);
+    array_delete(&alloc, &self->step_offsets);
+    array_delete(&alloc, &self->string_buffer);
+    array_delete(&alloc, &self->negated_fields);
+    array_delete(&alloc, &self->repeat_symbols_with_rootless_patterns);
     ts_language_delete(self->language);
-    symbol_table_delete(&self->allocator, &self->captures);
-    symbol_table_delete(&self->allocator, &self->predicate_values);
+    symbol_table_delete(&alloc, &self->captures);
+    symbol_table_delete(&alloc, &self->predicate_values);
     for (uint32_t index = 0; index < self->capture_quantifiers.size; index++) {
       CaptureQuantifiers *capture_quantifiers = array_get(&self->capture_quantifiers, index);
-      capture_quantifiers_delete(&self->allocator, capture_quantifiers);
+      capture_quantifiers_delete(&alloc, capture_quantifiers);
     }
-    array_delete(&self->allocator, &self->capture_quantifiers);
-    ts_alloc_free(&self->allocator, self);
+    array_delete(&alloc, &self->capture_quantifiers);
+    ts_alloc_free(&alloc, self);
   }
 }
 
@@ -3247,11 +3248,19 @@ TSQueryCursor *ts_query_cursor_new(void) {
 }
 
 void ts_query_cursor_delete(TSQueryCursor *self) {
-  array_delete(&self->allocator, &self->states);
-  array_delete(&self->allocator, &self->finished_states);
-  ts_tree_cursor_delete(&self->cursor);
-  capture_list_pool_delete(&self->allocator, &self->capture_list_pool);
-  ts_alloc_free(&self->allocator, self);
+  TSAllocator alloc = self->allocator;
+  array_delete(&alloc, &self->states);
+  array_delete(&alloc, &self->finished_states);
+  // Don't call ts_tree_cursor_delete here — it dereferences self->cursor.tree
+  // to get the allocator, but the tree may have already been freed (the query
+  // cursor does not own the tree). Instead, free the cursor stack directly
+  // using our own allocator.
+  {
+    TreeCursor *tc = (TreeCursor *)&self->cursor;
+    array_delete(&alloc, &tc->stack);
+  }
+  capture_list_pool_delete(&alloc, &self->capture_list_pool);
+  ts_alloc_free(&alloc, self);
 }
 
 bool ts_query_cursor_did_exceed_match_limit(const TSQueryCursor *self) {
