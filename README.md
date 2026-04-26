@@ -82,7 +82,22 @@ arena_release(&arena);    // bulk free everything
 - The `TSAllocator` struct is **copied** into the parser — callers don't need to keep it alive (but `ctx` must remain valid)
 - `TSTree` **inherits** the allocator from its parser at parse time
 - External scanners still use the global legacy allocator (`ts_set_allocator`) — they are unaffected by per-instance allocators
-- `wasm_store.c` is unchanged and uses the global legacy allocator
+
+### Arena Allocator Coverage
+
+All core library code paths use the per-instance `TSAllocator`:
+
+| Component | Arena Support |
+|-----------|:------------:|
+| `TSParser` (parser.c, stack.c, lexer.c) | ✅ |
+| `TSTree` (tree.c, subtree.c, tree_cursor.c) | ✅ |
+| `TSQuery` / `TSQueryCursor` (query.c) | ✅ |
+| Array/pool internals (array.h, reusable_node.h) | ✅ |
+| Changed ranges (get_changed_ranges.c) | ✅ |
+| Wasm store (wasm_store.c) | ❌ Uses global legacy allocator |
+| External scanners | ❌ Uses global legacy allocator (`ts_set_allocator`) |
+
+> **Note:** The Wasm store (`wasm_store.c`) is behind the optional `wasm` feature flag and is not compiled by default. It still uses the legacy global allocator (`ts_malloc`/`ts_free`). Wasm language support is unaffected by per-instance allocators.
 
 ## Links
 
