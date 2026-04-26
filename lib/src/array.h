@@ -52,71 +52,77 @@ extern "C" {
 
 /// Reserve `new_capacity` elements of space in the array. If `new_capacity` is
 /// less than the array's current capacity, this function has no effect.
-#define array_reserve(self, new_capacity)        \
-  ((self)->contents = _array__reserve(           \
-    (void *)(self)->contents, &(self)->capacity, \
-    array_elem_size(self), new_capacity)         \
+#define array_reserve(alloc, self, new_capacity)   \
+  ((self)->contents = _array__reserve(             \
+    alloc,                                         \
+    (void *)(self)->contents, &(self)->capacity,   \
+    array_elem_size(self), new_capacity)           \
   )
 
 /// Free any memory allocated for this array. Note that this does not free any
 /// memory allocated for the array's contents.
-#define array_delete(self)                           \
-  do {                                               \
-    if ((self)->contents) ts_free((self)->contents); \
-    (self)->contents = NULL;                         \
-    (self)->size = 0;                                \
-    (self)->capacity = 0;                            \
+#define array_delete(alloc, self)                             \
+  do {                                                       \
+    if ((self)->contents) ts_alloc_free(alloc, (self)->contents); \
+    (self)->contents = NULL;                                 \
+    (self)->size = 0;                                        \
+    (self)->capacity = 0;                                    \
   } while (0)
 
 /// Push a new `element` onto the end of the array.
-#define array_push(self, element)                                 \
-  do {                                                            \
-    (self)->contents = _array__grow(                              \
-      (void *)(self)->contents, (self)->size, &(self)->capacity,  \
-      1, array_elem_size(self)                                    \
-    );                                                            \
-   (self)->contents[(self)->size++] = (element);                  \
+#define array_push(alloc, self, element)                               \
+  do {                                                                 \
+    (self)->contents = _array__grow(                                   \
+      alloc,                                                           \
+      (void *)(self)->contents, (self)->size, &(self)->capacity,       \
+      1, array_elem_size(self)                                         \
+    );                                                                 \
+   (self)->contents[(self)->size++] = (element);                       \
   } while(0)
 
 /// Increase the array's size by `count` elements.
 /// New elements are zero-initialized.
-#define array_grow_by(self, count)                                               \
-  do {                                                                           \
-    if ((count) == 0) break;                                                     \
-    (self)->contents = _array__grow(                                             \
-      (self)->contents, (self)->size, &(self)->capacity,                         \
-      count, array_elem_size(self)                                               \
-    );                                                                           \
-    memset((self)->contents + (self)->size, 0, (count) * array_elem_size(self)); \
-    (self)->size += (count);                                                     \
+#define array_grow_by(alloc, self, count)                                             \
+  do {                                                                               \
+    if ((count) == 0) break;                                                         \
+    (self)->contents = _array__grow(                                                 \
+      alloc,                                                                         \
+      (self)->contents, (self)->size, &(self)->capacity,                             \
+      count, array_elem_size(self)                                                   \
+    );                                                                               \
+    memset((self)->contents + (self)->size, 0, (count) * array_elem_size(self));     \
+    (self)->size += (count);                                                         \
   } while (0)
 
 /// Append all elements from one array to the end of another.
-#define array_push_all(self, other) \
-  array_extend((self), (other)->size, (other)->contents)
+#define array_push_all(alloc, self, other) \
+  array_extend(alloc, (self), (other)->size, (other)->contents)
 
 /// Append `count` elements to the end of the array, reading their values from the
 /// `contents` pointer.
-#define array_extend(self, count, other_contents)                 \
-  (self)->contents = _array__splice(                              \
-    (void*)(self)->contents, &(self)->size, &(self)->capacity,    \
-    array_elem_size(self), (self)->size, 0, count, other_contents \
+#define array_extend(alloc, self, count, other_contents)                \
+  (self)->contents = _array__splice(                                    \
+    alloc,                                                              \
+    (void*)(self)->contents, &(self)->size, &(self)->capacity,          \
+    array_elem_size(self), (self)->size, 0, count, other_contents       \
   )
 
 /// Remove `old_count` elements from the array starting at the given `index`. At
 /// the same index, insert `new_count` new elements, reading their values from the
 /// `new_contents` pointer.
-#define array_splice(self, _index, old_count, new_count, new_contents) \
-  (self)->contents = _array__splice(                                   \
-    (void *)(self)->contents, &(self)->size, &(self)->capacity,        \
-    array_elem_size(self), _index, old_count, new_count, new_contents  \
+#define array_splice(alloc, self, _index, old_count, new_count, new_contents) \
+  (self)->contents = _array__splice(                                          \
+    alloc,                                                                    \
+    (void *)(self)->contents, &(self)->size, &(self)->capacity,               \
+    array_elem_size(self), _index, old_count, new_count, new_contents         \
   )
 
 /// Insert one `element` into the array at the given `index`.
-#define array_insert(self, _index, element)                     \
-  (self)->contents = _array__splice(                            \
-    (void *)(self)->contents, &(self)->size, &(self)->capacity, \
-    array_elem_size(self), _index, 0, 1, &(element)             \
+#define array_insert(alloc, self, _index, element)                    \
+  (self)->contents = _array__splice(                                  \
+    alloc,                                                            \
+    (void *)(self)->contents, &(self)->size, &(self)->capacity,       \
+    array_elem_size(self), _index, 0, 1, &(element)                   \
   )
 
 /// Remove one element from the array at the given `index`.
@@ -127,9 +133,10 @@ extern "C" {
 #define array_pop(self) ((self)->contents[--(self)->size])
 
 /// Assign the contents of one array to another, reallocating if necessary.
-#define array_assign(self, other)                                   \
-  (self)->contents = _array__assign(                                \
-    (void *)(self)->contents, &(self)->size, &(self)->capacity,     \
+#define array_assign(alloc, self, other)                                  \
+  (self)->contents = _array__assign(                                      \
+    alloc,                                                                \
+    (void *)(self)->contents, &(self)->size, &(self)->capacity,           \
     (const void *)(other)->contents, (other)->size, array_elem_size(self) \
   )
 
@@ -166,22 +173,22 @@ extern "C" {
 
 /// Insert a given `value` into a sorted array, using the given `compare`
 /// callback to determine the order.
-#define array_insert_sorted_with(self, compare, value) \
+#define array_insert_sorted_with(alloc, self, compare, value) \
   do { \
     unsigned _index, _exists; \
     array_search_sorted_with(self, compare, &(value), &_index, &_exists); \
-    if (!_exists) array_insert(self, _index, value); \
+    if (!_exists) array_insert(alloc, self, _index, value); \
   } while (0)
 
 /// Insert a given `value` into a sorted array, using integer comparisons of
 /// a given struct field (specified with a leading dot) to determine the order.
 ///
 /// See also `array_search_sorted_by`.
-#define array_insert_sorted_by(self, field, value) \
+#define array_insert_sorted_by(alloc, self, field, value) \
   do { \
     unsigned _index, _exists; \
     array_search_sorted_by(self, field, (value) field, &_index, &_exists); \
-    if (!_exists) array_insert(self, _index, value); \
+    if (!_exists) array_insert(alloc, self, _index, value); \
   } while (0)
 
 // Private
@@ -204,17 +211,17 @@ static inline void _array__erase(void* self_contents, uint32_t *size,
 }
 
 /// This is not what you're looking for, see `array_reserve`.
-static inline void *_array__reserve(void *contents, uint32_t *capacity,
+static inline void *_array__reserve(const TSAllocator *alloc, void *contents, uint32_t *capacity,
                                   size_t element_size, uint32_t new_capacity) {
   void *new_contents = contents;
   if (new_capacity > *capacity) {
     if (contents) {
       size_t old_size = *capacity * element_size;
       size_t new_size = new_capacity * element_size;
-      new_contents = ts_malloc(new_size);
+      new_contents = ts_alloc_malloc(alloc, new_size);
       memcpy(new_contents, contents, old_size);
     } else {
-      new_contents = ts_malloc(new_capacity * element_size);
+      new_contents = ts_alloc_malloc(alloc, new_capacity * element_size);
     }
     *capacity = new_capacity;
   }
@@ -222,9 +229,10 @@ static inline void *_array__reserve(void *contents, uint32_t *capacity,
 }
 
 /// This is not what you're looking for, see `array_assign`.
-static inline void *_array__assign(void* self_contents, uint32_t *self_size, uint32_t *self_capacity,
+static inline void *_array__assign(const TSAllocator *alloc, void* self_contents,
+                                 uint32_t *self_size, uint32_t *self_capacity,
                                  const void *other_contents, uint32_t other_size, size_t element_size) {
-  void *new_contents = _array__reserve(self_contents, self_capacity, element_size, other_size);
+  void *new_contents = _array__reserve(alloc, self_contents, self_capacity, element_size, other_size);
   *self_size = other_size;
   memcpy(new_contents, other_contents, *self_size * element_size);
   return new_contents;
@@ -242,7 +250,7 @@ static inline void _array__swap(uint32_t *self_size, uint32_t *self_capacity,
 }
 
 /// This is not what you're looking for, see `array_push` or `array_grow_by`.
-static inline void *_array__grow(void *contents, uint32_t size, uint32_t *capacity,
+static inline void *_array__grow(const TSAllocator *alloc, void *contents, uint32_t size, uint32_t *capacity,
                                uint32_t count, size_t element_size) {
   void *new_contents = contents;
   uint32_t new_size = size + count;
@@ -250,13 +258,13 @@ static inline void *_array__grow(void *contents, uint32_t size, uint32_t *capaci
     uint32_t new_capacity = *capacity * 2;
     if (new_capacity < 8) new_capacity = 8;
     if (new_capacity < new_size) new_capacity = new_size;
-    new_contents = _array__reserve(contents, capacity, element_size, new_capacity);
+    new_contents = _array__reserve(alloc, contents, capacity, element_size, new_capacity);
   }
   return new_contents;
 }
 
 /// This is not what you're looking for, see `array_splice`.
-static inline void *_array__splice(void *self_contents, uint32_t *size, uint32_t *capacity,
+static inline void *_array__splice(const TSAllocator *alloc, void *self_contents, uint32_t *size, uint32_t *capacity,
                                  size_t element_size,
                                  uint32_t index, uint32_t old_count,
                                  uint32_t new_count, const void *elements) {
@@ -265,7 +273,7 @@ static inline void *_array__splice(void *self_contents, uint32_t *size, uint32_t
   uint32_t new_end = index + new_count;
   ts_assert(old_end <= *size);
 
-  void *new_contents = _array__reserve(self_contents, capacity, element_size, new_size);
+  void *new_contents = _array__reserve(alloc, self_contents, capacity, element_size, new_size);
 
   char *contents = (char *)new_contents;
   if (*size > old_end) {
