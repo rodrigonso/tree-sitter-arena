@@ -29,9 +29,9 @@ void ts_tree_delete(TSTree *self) {
   if (!self) return;
 
   TSAllocator allocator = self->allocator;
-  SubtreePool pool = ts_subtree_pool_new(0);
-  ts_subtree_release(&pool, self->root);
-  ts_subtree_pool_delete(&pool);
+  SubtreePool pool = ts_subtree_pool_new(&allocator, 0);
+  ts_subtree_release(&allocator, &pool, self->root);
+  ts_subtree_pool_delete(&allocator, &pool);
   ts_language_delete(self->language);
   ts_alloc_free(&allocator, self->included_ranges);
   ts_alloc_free(&allocator, self);
@@ -59,9 +59,9 @@ void ts_tree_edit(TSTree *self, const TSInputEdit *edit) {
     ts_range_edit(&self->included_ranges[i], edit);
   }
 
-  SubtreePool pool = ts_subtree_pool_new(0);
-  self->root = ts_subtree_edit(self->root, edit, &pool);
-  ts_subtree_pool_delete(&pool);
+  SubtreePool pool = ts_subtree_pool_new(&self->allocator, 0);
+  self->root = ts_subtree_edit(&self->allocator, self->root, edit, &pool);
+  ts_subtree_pool_delete(&self->allocator, &pool);
 }
 
 TSRange *ts_tree_included_ranges(const TSTree *self, uint32_t *length) {

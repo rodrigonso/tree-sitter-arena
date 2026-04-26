@@ -232,7 +232,7 @@ static void ts_parser__breakdown_lookahead(
   Subtree tree = reusable_node_tree(reusable_node);
   while (ts_subtree_child_count(tree) > 0 && ts_subtree_parse_state(tree) != state) {
     LOG("state_mismatch sym:%s", TREE_NAME(tree));
-    reusable_node_descend(reusable_node);
+    reusable_node_descend(&self->allocator, reusable_node);
     tree = reusable_node_tree(reusable_node);
     did_descend = true;
   }
@@ -686,6 +686,7 @@ static Subtree ts_parser__lex(
     if (found_external_token) {
       MutableSubtree mut_result = ts_subtree_to_mut_unsafe(result);
       ts_external_scanner_state_init(
+        &self->allocator,
         &mut_result.ptr->external_scanner_state,
         self->lexer.debug_buffer,
         external_scanner_state_len
@@ -775,15 +776,15 @@ static Subtree ts_parser__reuse_node(
 
     if (byte_offset < position) {
       LOG("past_reusable_node symbol:%s", TREE_NAME(result));
-      if (end_byte_offset <= position || !reusable_node_descend(&self->reusable_node)) {
-        reusable_node_advance(&self->reusable_node);
+      if (end_byte_offset <= position || !reusable_node_descend(&self->allocator, &self->reusable_node)) {
+        reusable_node_advance(&self->allocator, &self->reusable_node);
       }
       continue;
     }
 
     if (!ts_subtree_external_scanner_state_eq(self->reusable_node.last_external_token, last_external_token)) {
       LOG("reusable_node_has_different_external_scanner_state symbol:%s", TREE_NAME(result));
-      reusable_node_advance(&self->reusable_node);
+      reusable_node_advance(&self->allocator, &self->reusable_node);
       continue;
     }
 
@@ -802,8 +803,8 @@ static Subtree ts_parser__reuse_node(
 
     if (reason) {
       LOG("cant_reuse_node_%s tree:%s", reason, TREE_NAME(result));
-      if (!reusable_node_descend(&self->reusable_node)) {
-        reusable_node_advance(&self->reusable_node);
+      if (!reusable_node_descend(&self->allocator, &self->reusable_node)) {
+        reusable_node_advance(&self->allocator, &self->reusable_node);
         ts_parser__breakdown_top_of_stack(self, version);
         *state = ts_stack_state(self->stack, version);
       }
@@ -818,7 +819,7 @@ static Subtree ts_parser__reuse_node(
         TREE_NAME(result),
         SYM_NAME(leaf_symbol)
       );
-      reusable_node_advance_past_leaf(&self->reusable_node);
+      reusable_node_advance_past_leaf(&self->allocator, &self->reusable_node);
       break;
     }
 
@@ -864,7 +865,7 @@ static bool ts_parser__select_tree(TSParser *self, Subtree left, Subtree right) 
 
   if (ts_subtree_error_cost(left) > 0) return true;
 
-  int comparison = ts_subtree_compare(left, right, &self->tree_pool);
+  int comparison = ts_subtree_compare(&self->allocator, left, right, &self->tree_pool);
   switch (comparison) {
     case -1:
       LOG("select_earlier symbol:%s, over_symbol:%s", TREE_NAME(left), TREE_NAME(right));
@@ -1116,7 +1117,7 @@ static bool ts_parser__process_candidate_recovery_actions(
         break;
       case TSParseActionTypeReduce:
         if (action.reduce.child_count > 0)
-          ts_reduce_action_set_add(&self->reduce_actions, (ReduceAction) {
+          ts_reduce_action_set_add(&self->allocator, &self->reduce_actions, (ReduceAction) {
             .symbol = action.reduce.symbol,
             .count = action.reduce.child_count,
             .dynamic_precedence = action.reduce.dynamic_precedence,
@@ -1668,11 +1669,11 @@ static bool ts_parser__advance(
           }
 
           ts_parser__shift(self, version, next_state, lookahead, action.shift.extra);
-          if (did_reuse) reusable_node_advance(&self->reusable_node);
+          if (did_reuse) reusable_node_advance(&self->allocator, &self->reusable_node);
           return true;
         }
 
-        case TSParseActionTypeReduce: {
+        case TSParseActionTypeReduce:{
           bool is_fragile = table_entry.action_count > 1;
           bool end_of_non_terminal_extra = lookahead.ptr == NULL;
           LOG("reduce sym:%s, child_count:%u", SYM_NAME(action.reduce.symbol), action.reduce.child_count);
@@ -1700,7 +1701,7 @@ static bool ts_parser__advance(
           }
 
           ts_parser__recover(self, version, lookahead);
-          if (did_reuse) reusable_node_advance(&self->reusable_node);
+          if (did_reuse) reusable_node_advance(&self->allocator, &self->reusable_node);
           return true;
         }
       }
@@ -1965,7 +1966,7 @@ static bool ts_parser_has_outstanding_parse(TSParser *self) {
 TSParser *ts_parser_new_with_allocator(const TSAllocator *alloc) {
   TSParser *self = ts_alloc_calloc(alloc, 1, sizeof(TSParser));
   self->allocator = *alloc;
-  ts_lexer_init(&self->allocator, &self->lexer);
+  ts_lexer_init(&self->lexer);
   array_init(&self->reduce_actions);
   array_reserve(&self->allocator, &self->reduce_actions, 4);
   self->tree_pool = ts_subtree_pool_new(&self->allocator, 32);
@@ -1994,7 +1995,7 @@ void ts_parser_delete(TSParser *self) {
   if (!self) return;
 
   ts_parser_set_language(self, NULL);
-  ts_stack_delete(&self->allocator, self->stack);
+  ts_stack_delete(self->stack);
   if (self->reduce_actions.contents) {
     array_delete(&self->allocator, &self->reduce_actions);
   }
@@ -2009,7 +2010,7 @@ void ts_parser_delete(TSParser *self) {
   ts_lexer_delete(&self->allocator, &self->lexer);
   ts_parser__set_cached_token(self, 0, NULL_SUBTREE, NULL_SUBTREE);
   ts_subtree_pool_delete(&self->allocator, &self->tree_pool);
-  reusable_node_delete(&self->reusable_node);
+  reusable_node_delete(&self->allocator, &self->reusable_node);
   array_delete(&self->allocator, &self->trailing_extras);
   array_delete(&self->allocator, &self->trailing_extras2);
   array_delete(&self->allocator, &self->scratch_trees);
@@ -2142,7 +2143,7 @@ TSTree *ts_parser_parse(
         self->lexer.included_ranges, self->lexer.included_range_count,
         &self->included_range_differences
       );
-      reusable_node_reset(&self->reusable_node, old_tree->root);
+      reusable_node_reset(&self->allocator, &self->reusable_node, old_tree->root);
       LOG("parse_after_edit");
       LOG_TREE(self->old_tree);
       for (unsigned i = 0; i < self->included_range_differences.size; i++) {
