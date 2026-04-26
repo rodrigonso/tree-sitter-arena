@@ -207,6 +207,25 @@ typedef struct TSLanguageMetadata {
   uint8_t patch_version;
 } TSLanguageMetadata;
 
+/**
+ * A custom memory allocator.
+ *
+ * All function pointers receive the user-provided `ctx` as their last argument,
+ * enabling arena allocators, pool allocators, or any stateful allocation scheme
+ * without relying on global or thread-local state.
+ *
+ * There is intentionally no `realloc` — the library handles resizable buffers
+ * internally via malloc + memcpy.
+ *
+ * For arena/bump allocators, `free` can be a no-op — the arena frees in bulk.
+ */
+typedef struct TSAllocator {
+  void *(*malloc)(size_t size, void *ctx);
+  void *(*calloc)(size_t count, size_t size, void *ctx);
+  void (*free)(void *ptr, void *ctx);
+  void *ctx;
+} TSAllocator;
+
 /********************/
 /* Section - Parser */
 /********************/
@@ -215,6 +234,19 @@ typedef struct TSLanguageMetadata {
  * Create a new parser.
  */
 TSParser *ts_parser_new(void);
+
+/**
+ * Create a new parser using a custom allocator.
+ *
+ * The parser takes ownership of the allocator and uses it for all internal
+ * allocations. The allocator is also inherited by any TSTree produced by
+ * this parser.
+ *
+ * The allocator struct is copied — the caller does not need to keep it alive.
+ * However, the `ctx` pointer within the allocator must remain valid for the
+ * lifetime of the parser and any trees it produces.
+ */
+TSParser *ts_parser_new_with_allocator(const TSAllocator *allocator);
 
 /**
  * Delete the parser, freeing all of the memory that it used.
@@ -913,6 +945,21 @@ TSQuery *ts_query_new(
 );
 
 /**
+ * Create a new query using a custom allocator.
+ *
+ * See [`ts_query_new`] for details. The allocator is used for all internal
+ * allocations and must remain valid for the lifetime of the query.
+ */
+TSQuery *ts_query_new_with_allocator(
+  const TSAllocator *allocator,
+  const TSLanguage *language,
+  const char *source,
+  uint32_t source_len,
+  uint32_t *error_offset,
+  TSQueryError *error_type
+);
+
+/**
  * Delete a query, freeing all of the memory that it used.
  */
 void ts_query_delete(TSQuery *self);
@@ -1050,6 +1097,14 @@ void ts_query_disable_pattern(TSQuery *self, uint32_t pattern_index);
  *  [`ts_query_cursor_exec`] again.
  */
 TSQueryCursor *ts_query_cursor_new(void);
+
+/**
+ * Create a new query cursor using a custom allocator.
+ *
+ * See [`ts_query_cursor_new`] for details. The allocator is used for all
+ * internal allocations and must remain valid for the lifetime of the cursor.
+ */
+TSQueryCursor *ts_query_cursor_new_with_allocator(const TSAllocator *allocator);
 
 /**
  * Delete a query cursor, freeing all of the memory that it used.
@@ -1427,6 +1482,13 @@ TSWasmStore *ts_parser_take_wasm_store(TSParser *);
 /**********************************/
 /* Section - Global Configuration */
 /**********************************/
+
+/**
+ * Get the default allocator used by `ts_parser_new()` and other functions
+ * that don't take an explicit allocator. This uses the standard libc
+ * allocation functions by default, but can be changed via `ts_set_allocator()`.
+ */
+const TSAllocator *ts_default_allocator(void);
 
 /**
  * Set the allocation functions used by the library.
