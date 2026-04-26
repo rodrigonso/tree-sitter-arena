@@ -7,32 +7,34 @@
 #include "./tree.h"
 
 TSTree *ts_tree_new(
-  Subtree root, const TSLanguage *language,
+  const TSAllocator *alloc, Subtree root, const TSLanguage *language,
   const TSRange *included_ranges, unsigned included_range_count
 ) {
-  TSTree *result = ts_malloc(sizeof(TSTree));
+  TSTree *result = ts_alloc_malloc(alloc, sizeof(TSTree));
   result->root = root;
   result->language = ts_language_copy(language);
-  result->included_ranges = ts_calloc(included_range_count, sizeof(TSRange));
+  result->included_ranges = ts_alloc_calloc(alloc, included_range_count, sizeof(TSRange));
   memcpy(result->included_ranges, included_ranges, included_range_count * sizeof(TSRange));
   result->included_range_count = included_range_count;
+  result->allocator = *alloc;
   return result;
 }
 
 TSTree *ts_tree_copy(const TSTree *self) {
   ts_subtree_retain(self->root);
-  return ts_tree_new(self->root, self->language, self->included_ranges, self->included_range_count);
+  return ts_tree_new(&self->allocator, self->root, self->language, self->included_ranges, self->included_range_count);
 }
 
 void ts_tree_delete(TSTree *self) {
   if (!self) return;
 
+  TSAllocator allocator = self->allocator;
   SubtreePool pool = ts_subtree_pool_new(0);
   ts_subtree_release(&pool, self->root);
   ts_subtree_pool_delete(&pool);
   ts_language_delete(self->language);
-  ts_free(self->included_ranges);
-  ts_free(self);
+  ts_alloc_free(&allocator, self->included_ranges);
+  ts_alloc_free(&allocator, self);
 }
 
 TSNode ts_tree_root_node(const TSTree *self) {
@@ -64,12 +66,14 @@ void ts_tree_edit(TSTree *self, const TSInputEdit *edit) {
 
 TSRange *ts_tree_included_ranges(const TSTree *self, uint32_t *length) {
   *length = self->included_range_count;
-  TSRange *ranges = ts_calloc(self->included_range_count, sizeof(TSRange));
+  const TSAllocator *alloc = &self->allocator;
+  TSRange *ranges = ts_alloc_calloc(alloc, self->included_range_count, sizeof(TSRange));
   memcpy(ranges, self->included_ranges, self->included_range_count * sizeof(TSRange));
   return ranges;
 }
 
 TSRange *ts_tree_get_changed_ranges(const TSTree *old_tree, const TSTree *new_tree, uint32_t *length) {
+  const TSAllocator *alloc = &old_tree->allocator;
   TreeCursor cursor1 = {NULL, array_new(), 0};
   TreeCursor cursor2 = {NULL, array_new(), 0};
   ts_tree_cursor_init(&cursor1, ts_tree_root_node(old_tree));
@@ -77,6 +81,7 @@ TSRange *ts_tree_get_changed_ranges(const TSTree *old_tree, const TSTree *new_tr
 
   TSRangeArray included_range_differences = array_new();
   ts_range_array_get_changed_ranges(
+    alloc,
     old_tree->included_ranges, old_tree->included_range_count,
     new_tree->included_ranges, new_tree->included_range_count,
     &included_range_differences
@@ -84,13 +89,13 @@ TSRange *ts_tree_get_changed_ranges(const TSTree *old_tree, const TSTree *new_tr
 
   TSRange *result;
   *length = ts_subtree_get_changed_ranges(
-    &old_tree->root, &new_tree->root, &cursor1, &cursor2,
+    alloc, &old_tree->root, &new_tree->root, &cursor1, &cursor2,
     old_tree->language, &included_range_differences, &result
   );
 
-  array_delete(&included_range_differences);
-  array_delete(&cursor1.stack);
-  array_delete(&cursor2.stack);
+  array_delete(alloc, &included_range_differences);
+  array_delete(alloc, &cursor1.stack);
+  array_delete(alloc, &cursor2.stack);
   return result;
 }
 

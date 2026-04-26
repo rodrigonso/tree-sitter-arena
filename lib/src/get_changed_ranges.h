@@ -7,10 +7,12 @@ extern "C" {
 
 #include "./tree_cursor.h"
 #include "./subtree.h"
+#include "./alloc.h"
 
 typedef Array(TSRange) TSRangeArray;
 
 void ts_range_array_get_changed_ranges(
+  const TSAllocator *alloc,
   const TSRange *old_ranges, unsigned old_range_count,
   const TSRange *new_ranges, unsigned new_range_count,
   TSRangeArray *differences
@@ -22,6 +24,7 @@ bool ts_range_array_intersects(
 );
 
 unsigned ts_subtree_get_changed_ranges(
+  const TSAllocator *alloc,
   const Subtree *old_tree, const Subtree *new_tree,
   TreeCursor *cursor1, TreeCursor *cursor2,
   const TSLanguage *language,

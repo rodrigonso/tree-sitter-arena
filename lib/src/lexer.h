@@ -38,13 +38,13 @@ typedef struct {
 } Lexer;
 
 void ts_lexer_init(Lexer *self);
-void ts_lexer_delete(Lexer *self);
+void ts_lexer_delete(Lexer *self, const TSAllocator *alloc);
 void ts_lexer_set_input(Lexer *self, TSInput input);
 void ts_lexer_reset(Lexer *self, Length position);
 void ts_lexer_start(Lexer *self);
 void ts_lexer_finish(Lexer *self, uint32_t *lookahead_end_byte);
 void ts_lexer_mark_end(Lexer *self);
-bool ts_lexer_set_included_ranges(Lexer *self, const TSRange *ranges, uint32_t count);
+bool ts_lexer_set_included_ranges(Lexer *self, const TSAllocator *alloc, const TSRange *ranges, uint32_t count);
 TSRange *ts_lexer_included_ranges(const Lexer *self, uint32_t *count);
 
 #ifdef __cplusplus

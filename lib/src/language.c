@@ -1,5 +1,6 @@
 #include "./language.h"
 #include "./wasm_store.h"
+#include "./alloc.h"
 #include "tree_sitter/api.h"
 #include <string.h>
 
@@ -245,13 +246,13 @@ TSFieldId ts_language_field_id_for_name(
 
 TSLookaheadIterator *ts_lookahead_iterator_new(const TSLanguage *self, TSStateId state) {
   if (state >= self->state_count) return NULL;
-  LookaheadIterator *iterator = ts_malloc(sizeof(LookaheadIterator));
+  LookaheadIterator *iterator = ts_alloc_malloc(&ts_builtin_allocator, sizeof(LookaheadIterator));
   *iterator = ts_language_lookaheads(self, state);
   return (TSLookaheadIterator *)iterator;
 }
 
 void ts_lookahead_iterator_delete(TSLookaheadIterator *self) {
-  ts_free(self);
+  ts_alloc_free(&ts_builtin_allocator, self);
 }
 
 bool ts_lookahead_iterator_reset_state(TSLookaheadIterator * self, TSStateId state) {

@@ -5,6 +5,7 @@
 extern "C" {
 #endif
 
+#include "./alloc.h"
 #include "./array.h"
 #include "./subtree.h"
 #include <stdio.h>
@@ -28,7 +29,7 @@ typedef struct {
 typedef Array(StackSummaryEntry) StackSummary;
 
 // Create a stack.
-Stack *ts_stack_new(SubtreePool *subtree_pool);
+Stack *ts_stack_new(const TSAllocator *alloc, SubtreePool *subtree_pool);
 
 // Release the memory reserved for a given stack.
 void ts_stack_delete(Stack *self);

@@ -1,6 +1,7 @@
 #include "./length.h"
 #include "./lexer.h"
 #include "./unicode.h"
+#include "./alloc.h"
 
 #include "tree_sitter/api.h"
 
@@ -378,11 +379,11 @@ void ts_lexer_init(Lexer *self) {
       .value = 0
     }
   };
-  ts_lexer_set_included_ranges(self, NULL, 0);
+  ts_lexer_set_included_ranges(self, &ts_builtin_allocator, NULL, 0);
 }
 
-void ts_lexer_delete(Lexer *self) {
-  ts_free(self->included_ranges);
+void ts_lexer_delete(Lexer *self, const TSAllocator *alloc) {
+  ts_alloc_free(alloc, self->included_ranges);
 }
 
 void ts_lexer_set_input(Lexer *self, TSInput input) {
@@ -449,6 +450,7 @@ void ts_lexer_mark_end(Lexer *self) {
 
 bool ts_lexer_set_included_ranges(
   Lexer *self,
+  const TSAllocator *alloc,
   const TSRange *ranges,
   uint32_t count
 ) {
@@ -468,7 +470,7 @@ bool ts_lexer_set_included_ranges(
   }
 
   size_t size = count * sizeof(TSRange);
-  self->included_ranges = ts_malloc(size);
+  self->included_ranges = ts_alloc_malloc(alloc, size);
   memcpy(self->included_ranges, ranges, size);
   self->included_range_count = count;
   ts_lexer_goto(self, self->current_position);

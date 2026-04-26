@@ -482,6 +482,7 @@ const char *ts_node_grammar_type(TSNode self) {
 char *ts_node_string(TSNode self) {
   TSSymbol alias_symbol = ts_node__alias(&self);
   return ts_subtree_string(
+    &self.tree->allocator,
     ts_node__subtree(self),
     alias_symbol,
     ts_language_symbol_metadata(self.tree->language, alias_symbol).visible,

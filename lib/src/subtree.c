@@ -20,32 +20,32 @@ typedef struct {
 } Edit;
 
 #define TS_MAX_INLINE_TREE_LENGTH UINT8_MAX
-#define TS_MAX_TREE_POOL_SIZE 32
+#define TS_MAX_TREE_POOL_SIZE UINT32_MAX
 
 // ExternalScannerState
 
-void ts_external_scanner_state_init(ExternalScannerState *self, const char *data, unsigned length) {
+void ts_external_scanner_state_init(const TSAllocator *alloc, ExternalScannerState *self, const char *data, unsigned length) {
   self->length = length;
   if (length > sizeof(self->short_data)) {
-    self->long_data = ts_malloc(length);
+    self->long_data = ts_alloc_malloc(alloc, length);
     memcpy(self->long_data, data, length);
   } else {
     memcpy(self->short_data, data, length);
   }
 }
 
-ExternalScannerState ts_external_scanner_state_copy(const ExternalScannerState *self) {
+ExternalScannerState ts_external_scanner_state_copy(const TSAllocator *alloc, const ExternalScannerState *self) {
   ExternalScannerState result = *self;
   if (self->length > sizeof(self->short_data)) {
-    result.long_data = ts_malloc(self->length);
+    result.long_data = ts_alloc_malloc(alloc, self->length);
     memcpy(result.long_data, self->long_data, self->length);
   }
   return result;
 }
 
-void ts_external_scanner_state_delete(ExternalScannerState *self) {
+void ts_external_scanner_state_delete(const TSAllocator *alloc, ExternalScannerState *self) {
   if (self->length > sizeof(self->short_data)) {
-    ts_free(self->long_data);
+    ts_alloc_free(alloc, self->long_data);
   }
 }
 
@@ -65,12 +65,12 @@ bool ts_external_scanner_state_eq(const ExternalScannerState *self, const char *
 
 // SubtreeArray
 
-void ts_subtree_array_copy(SubtreeArray self, SubtreeArray *dest) {
+void ts_subtree_array_copy(const TSAllocator *alloc, SubtreeArray self, SubtreeArray *dest) {
   dest->size = self.size;
   dest->capacity = self.capacity;
   dest->contents = self.contents;
   if (self.capacity > 0) {
-    dest->contents = ts_calloc(self.capacity, sizeof(Subtree));
+    dest->contents = ts_alloc_calloc(alloc, self.capacity, sizeof(Subtree));
     memcpy(dest->contents, self.contents, self.size * sizeof(Subtree));
     for (uint32_t i = 0; i < self.size; i++) {
       ts_subtree_retain(*array_get(dest, i));
@@ -78,19 +78,20 @@ void ts_subtree_array_copy(SubtreeArray self, SubtreeArray *dest) {
   }
 }
 
-void ts_subtree_array_clear(SubtreePool *pool, SubtreeArray *self) {
+void ts_subtree_array_clear(const TSAllocator *alloc, SubtreePool *pool, SubtreeArray *self) {
   for (uint32_t i = 0; i < self->size; i++) {
-    ts_subtree_release(pool, *array_get(self, i));
+    ts_subtree_release(alloc, pool, *array_get(self, i));
   }
   array_clear(self);
 }
 
-void ts_subtree_array_delete(SubtreePool *pool, SubtreeArray *self) {
-  ts_subtree_array_clear(pool, self);
-  array_delete(self);
+void ts_subtree_array_delete(const TSAllocator *alloc, SubtreePool *pool, SubtreeArray *self) {
+  ts_subtree_array_clear(alloc, pool, self);
+  array_delete(alloc, self);
 }
 
 void ts_subtree_array_remove_trailing_extras(
+  const TSAllocator *alloc,
   SubtreeArray *self,
   SubtreeArray *destination
 ) {
@@ -99,7 +100,7 @@ void ts_subtree_array_remove_trailing_extras(
     Subtree last = *array_get(self, self->size - 1);
     if (ts_subtree_extra(last)) {
       self->size--;
-      array_push(destination, last);
+      array_push(alloc, destination, last);
     } else {
       break;
     }
@@ -118,35 +119,35 @@ void ts_subtree_array_reverse(SubtreeArray *self) {
 
 // SubtreePool
 
-SubtreePool ts_subtree_pool_new(uint32_t capacity) {
+SubtreePool ts_subtree_pool_new(const TSAllocator *alloc, uint32_t capacity) {
   SubtreePool self = {array_new(), array_new()};
-  array_reserve(&self.free_trees, capacity);
+  array_reserve(alloc, &self.free_trees, capacity);
   return self;
 }
 
-void ts_subtree_pool_delete(SubtreePool *self) {
+void ts_subtree_pool_delete(const TSAllocator *alloc, SubtreePool *self) {
   if (self->free_trees.contents) {
     for (unsigned i = 0; i < self->free_trees.size; i++) {
-      ts_free(array_get(&self->free_trees, i)->ptr);
+      ts_alloc_free(alloc, array_get(&self->free_trees, i)->ptr);
     }
-    array_delete(&self->free_trees);
+    array_delete(alloc, &self->free_trees);
   }
-  if (self->tree_stack.contents) array_delete(&self->tree_stack);
+  if (self->tree_stack.contents) array_delete(alloc, &self->tree_stack);
 }
 
-static SubtreeHeapData *ts_subtree_pool_allocate(SubtreePool *self) {
+static SubtreeHeapData *ts_subtree_pool_allocate(const TSAllocator *alloc, SubtreePool *self) {
   if (self->free_trees.size > 0) {
     return array_pop(&self->free_trees).ptr;
   } else {
-    return ts_malloc(sizeof(SubtreeHeapData));
+    return ts_alloc_malloc(alloc, sizeof(SubtreeHeapData));
   }
 }
 
-static void ts_subtree_pool_free(SubtreePool *self, SubtreeHeapData *tree) {
+static void ts_subtree_pool_free(const TSAllocator *alloc, SubtreePool *self, SubtreeHeapData *tree) {
   if (self->free_trees.capacity > 0 && self->free_trees.size + 1 <= TS_MAX_TREE_POOL_SIZE) {
-    array_push(&self->free_trees, (MutableSubtree) {.ptr = tree});
+    array_push(alloc, &self->free_trees, (MutableSubtree) {.ptr = tree});
   } else {
-    ts_free(tree);
+    ts_alloc_free(alloc, tree);
   }
 }
 
@@ -164,7 +165,7 @@ static inline bool ts_subtree_can_inline(Length padding, Length size, uint32_t l
 }
 
 Subtree ts_subtree_new_leaf(
-  SubtreePool *pool, TSSymbol symbol, Length padding, Length size,
+  const TSAllocator *alloc, SubtreePool *pool, TSSymbol symbol, Length padding, Length size,
   uint32_t lookahead_bytes, TSStateId parse_state,
   bool has_external_tokens, bool depends_on_column,
   bool is_keyword, const TSLanguage *language
@@ -196,7 +197,7 @@ Subtree ts_subtree_new_leaf(
       .is_inline = true,
     }};
   } else {
-    SubtreeHeapData *data = ts_subtree_pool_allocate(pool);
+    SubtreeHeapData *data = ts_subtree_pool_allocate(alloc, pool);
     *data = (SubtreeHeapData) {
       .ref_count = 1,
       .padding = padding,
@@ -242,11 +243,11 @@ void ts_subtree_set_symbol(
 }
 
 Subtree ts_subtree_new_error(
-  SubtreePool *pool, int32_t lookahead_char, Length padding, Length size,
+  const TSAllocator *alloc, SubtreePool *pool, int32_t lookahead_char, Length padding, Length size,
   uint32_t bytes_scanned, TSStateId parse_state, const TSLanguage *language
 ) {
   Subtree result = ts_subtree_new_leaf(
-    pool, ts_builtin_sym_error, padding, size, bytes_scanned,
+    alloc, pool, ts_builtin_sym_error, padding, size, bytes_scanned,
     parse_state, false, false, false, language
   );
   SubtreeHeapData *data = (SubtreeHeapData *)result.ptr;
@@ -257,9 +258,9 @@ Subtree ts_subtree_new_error(
 }
 
 // Clone a subtree.
-MutableSubtree ts_subtree_clone(Subtree self) {
+MutableSubtree ts_subtree_clone(const TSAllocator *alloc, Subtree self) {
   size_t alloc_size = ts_subtree_alloc_size(self.ptr->child_count);
-  Subtree *new_children = ts_malloc(alloc_size);
+  Subtree *new_children = ts_alloc_malloc(alloc, alloc_size);
   Subtree *old_children = ts_subtree_children(self);
   memcpy(new_children, old_children, alloc_size);
   SubtreeHeapData *result = (SubtreeHeapData *)&new_children[self.ptr->child_count];
@@ -269,7 +270,7 @@ MutableSubtree ts_subtree_clone(Subtree self) {
     }
   } else if (self.ptr->has_external_tokens) {
     result->external_scanner_state = ts_external_scanner_state_copy(
-      &self.ptr->external_scanner_state
+      alloc, &self.ptr->external_scanner_state
     );
   }
   result->ref_count = 1;
@@ -281,15 +282,16 @@ MutableSubtree ts_subtree_clone(Subtree self) {
 // This takes ownership of the subtree. If the subtree has only one owner,
 // this will directly convert it into a mutable version. Otherwise, it will
 // perform a copy.
-MutableSubtree ts_subtree_make_mut(SubtreePool *pool, Subtree self) {
+MutableSubtree ts_subtree_make_mut(const TSAllocator *alloc, SubtreePool *pool, Subtree self) {
   if (self.data.is_inline) return (MutableSubtree) {self.data};
   if (self.ptr->ref_count == 1) return ts_subtree_to_mut_unsafe(self);
-  MutableSubtree result = ts_subtree_clone(self);
-  ts_subtree_release(pool, self);
+  MutableSubtree result = ts_subtree_clone(alloc, self);
+  ts_subtree_release(alloc, pool, self);
   return result;
 }
 
 void ts_subtree_compress(
+  const TSAllocator *alloc,
   MutableSubtree self,
   unsigned count,
   const TSLanguage *language,
@@ -321,7 +323,7 @@ void ts_subtree_compress(
     ts_subtree_children(tree)[0] = ts_subtree_from_mut(grandchild);
     ts_subtree_children(child)[0] = ts_subtree_children(grandchild)[grandchild.ptr->child_count - 1];
     ts_subtree_children(grandchild)[grandchild.ptr->child_count - 1] = ts_subtree_from_mut(child);
-    array_push(stack, tree);
+    array_push(alloc, stack, tree);
     tree = grandchild;
   }
 
@@ -478,6 +480,7 @@ void ts_subtree_summarize_children(
 //
 // This takes ownership of the children array.
 MutableSubtree ts_subtree_new_node(
+  const TSAllocator *alloc,
   TSSymbol symbol,
   SubtreeArray *children,
   unsigned production_id,
@@ -490,7 +493,7 @@ MutableSubtree ts_subtree_new_node(
   size_t new_byte_size = ts_subtree_alloc_size(children->size);
   if (children->capacity * sizeof(Subtree) < new_byte_size) {
     size_t old_byte_size = children->capacity * sizeof(Subtree);
-    Subtree *new_contents = ts_malloc(new_byte_size);
+    Subtree *new_contents = ts_alloc_malloc(alloc, new_byte_size);
     if (children->contents) {
       memcpy(new_contents, children->contents, old_byte_size);
     }
@@ -526,12 +529,13 @@ MutableSubtree ts_subtree_new_node(
 // This node is treated as 'extra'. Its children are prevented from having
 // any effect on the parse state.
 Subtree ts_subtree_new_error_node(
+  const TSAllocator *alloc,
   SubtreeArray *children,
   bool extra,
   const TSLanguage *language
 ) {
   MutableSubtree result = ts_subtree_new_node(
-    ts_builtin_sym_error, children, 0, language
+    alloc, ts_builtin_sym_error, children, 0, language
   );
   result.ptr->extra = extra;
   return ts_subtree_from_mut(result);
@@ -542,6 +546,7 @@ Subtree ts_subtree_new_error_node(
 // This node is treated as 'extra'. Its children are prevented from having
 // any effect on the parse state.
 Subtree ts_subtree_new_missing_leaf(
+  const TSAllocator *alloc,
   SubtreePool *pool,
   TSSymbol symbol,
   Length padding,
@@ -549,7 +554,7 @@ Subtree ts_subtree_new_missing_leaf(
   const TSLanguage *language
 ) {
   Subtree result = ts_subtree_new_leaf(
-    pool, symbol, padding, length_zero(), lookahead_bytes,
+    alloc, pool, symbol, padding, length_zero(), lookahead_bytes,
     0, false, false, false, language
   );
   if (result.data.is_inline) {
@@ -567,13 +572,13 @@ void ts_subtree_retain(Subtree self) {
   ts_assert(self.ptr->ref_count != 0);
 }
 
-void ts_subtree_release(SubtreePool *pool, Subtree self) {
+void ts_subtree_release(const TSAllocator *alloc, SubtreePool *pool, Subtree self) {
   if (self.data.is_inline) return;
   array_clear(&pool->tree_stack);
 
   ts_assert(self.ptr->ref_count > 0);
   if (atomic_dec((volatile uint32_t *)&self.ptr->ref_count) == 0) {
-    array_push(&pool->tree_stack, ts_subtree_to_mut_unsafe(self));
+    array_push(alloc, &pool->tree_stack, ts_subtree_to_mut_unsafe(self));
   }
 
   while (pool->tree_stack.size > 0) {
@@ -585,22 +590,22 @@ void ts_subtree_release(SubtreePool *pool, Subtree self) {
         if (child.data.is_inline) continue;
         ts_assert(child.ptr->ref_count > 0);
         if (atomic_dec((volatile uint32_t *)&child.ptr->ref_count) == 0) {
-          array_push(&pool->tree_stack, ts_subtree_to_mut_unsafe(child));
+          array_push(alloc, &pool->tree_stack, ts_subtree_to_mut_unsafe(child));
         }
       }
-      ts_free(children);
+      ts_alloc_free(alloc, children);
     } else {
       if (tree.ptr->has_external_tokens) {
-        ts_external_scanner_state_delete(&tree.ptr->external_scanner_state);
+        ts_external_scanner_state_delete(alloc, &tree.ptr->external_scanner_state);
       }
-      ts_subtree_pool_free(pool, tree.ptr);
+      ts_subtree_pool_free(alloc, pool, tree.ptr);
     }
   }
 }
 
-int ts_subtree_compare(Subtree left, Subtree right, SubtreePool *pool) {
-  array_push(&pool->tree_stack, ts_subtree_to_mut_unsafe(left));
-  array_push(&pool->tree_stack, ts_subtree_to_mut_unsafe(right));
+int ts_subtree_compare(const TSAllocator *alloc, Subtree left, Subtree right, SubtreePool *pool) {
+  array_push(alloc, &pool->tree_stack, ts_subtree_to_mut_unsafe(left));
+  array_push(alloc, &pool->tree_stack, ts_subtree_to_mut_unsafe(right));
 
   while (pool->tree_stack.size > 0) {
     right = ts_subtree_from_mut(array_pop(&pool->tree_stack));
@@ -619,8 +624,8 @@ int ts_subtree_compare(Subtree left, Subtree right, SubtreePool *pool) {
     for (uint32_t i = ts_subtree_child_count(left); i > 0; i--) {
       Subtree left_child = ts_subtree_children(left)[i - 1];
       Subtree right_child = ts_subtree_children(right)[i - 1];
-      array_push(&pool->tree_stack, ts_subtree_to_mut_unsafe(left_child));
-      array_push(&pool->tree_stack, ts_subtree_to_mut_unsafe(right_child));
+      array_push(alloc, &pool->tree_stack, ts_subtree_to_mut_unsafe(left_child));
+      array_push(alloc, &pool->tree_stack, ts_subtree_to_mut_unsafe(right_child));
     }
   }
 
@@ -635,14 +640,14 @@ static inline void ts_subtree_set_has_changes(MutableSubtree *self) {
   }
 }
 
-Subtree ts_subtree_edit(Subtree self, const TSInputEdit *input_edit, SubtreePool *pool) {
+Subtree ts_subtree_edit(const TSAllocator *alloc, Subtree self, const TSInputEdit *input_edit, SubtreePool *pool) {
   typedef struct {
     Subtree *tree;
     Edit edit;
   } EditEntry;
 
   Array(EditEntry) stack = array_new();
-  array_push(&stack, ((EditEntry) {
+  array_push(alloc, &stack, ((EditEntry) {
     .tree = &self,
     .edit = (Edit) {
       .start = {input_edit->start_byte, input_edit->start_point},
@@ -690,7 +695,7 @@ Subtree ts_subtree_edit(Subtree self, const TSInputEdit *input_edit, SubtreePool
       );
     }
 
-    MutableSubtree result = ts_subtree_make_mut(pool, *entry.tree);
+    MutableSubtree result = ts_subtree_make_mut(alloc, pool, *entry.tree);
 
     if (result.data.is_inline) {
       if (ts_subtree_can_inline(padding, size, lookahead_bytes)) {
@@ -699,7 +704,7 @@ Subtree ts_subtree_edit(Subtree self, const TSInputEdit *input_edit, SubtreePool
         result.data.padding_columns = padding.extent.column;
         result.data.size_bytes = size.bytes;
       } else {
-        SubtreeHeapData *data = ts_subtree_pool_allocate(pool);
+        SubtreeHeapData *data = ts_subtree_pool_allocate(alloc, pool);
         data->ref_count = 1;
         data->padding = padding;
         data->size = size;
@@ -779,14 +784,14 @@ Subtree ts_subtree_edit(Subtree self, const TSInputEdit *input_edit, SubtreePool
       }
 
       // Queue processing of this child's subtree.
-      array_push(&stack, ((EditEntry) {
+      array_push(alloc, &stack, ((EditEntry) {
         .tree = child,
         .edit = child_edit,
       }));
     }
   }
 
-  array_delete(&stack);
+  array_delete(alloc, &stack);
   return self;
 }
 
@@ -930,6 +935,7 @@ static size_t ts_subtree__write_to_string(
 }
 
 char *ts_subtree_string(
+  const TSAllocator *alloc,
   Subtree self,
   TSSymbol alias_symbol,
   bool alias_is_named,
@@ -942,7 +948,7 @@ char *ts_subtree_string(
     language, include_all,
     alias_symbol, alias_is_named, ROOT_FIELD
   ) + 1;
-  char *result = ts_malloc(size * sizeof(char));
+  char *result = ts_alloc_malloc(alloc, size * sizeof(char));
   ts_subtree__write_to_string(
     self, result, size,
     language, include_all,
