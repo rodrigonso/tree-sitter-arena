@@ -468,7 +468,7 @@ bool ts_lexer_set_included_ranges(
   }
 
   size_t size = count * sizeof(TSRange);
-  self->included_ranges = ts_realloc(self->included_ranges, size);
+  self->included_ranges = ts_malloc(size);
   memcpy(self->included_ranges, ranges, size);
   self->included_range_count = count;
   ts_lexer_goto(self, self->current_position);

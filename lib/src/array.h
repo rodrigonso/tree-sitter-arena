@@ -209,7 +209,10 @@ static inline void *_array__reserve(void *contents, uint32_t *capacity,
   void *new_contents = contents;
   if (new_capacity > *capacity) {
     if (contents) {
-      new_contents = ts_realloc(contents, new_capacity * element_size);
+      size_t old_size = *capacity * element_size;
+      size_t new_size = new_capacity * element_size;
+      new_contents = ts_malloc(new_size);
+      memcpy(new_contents, contents, old_size);
     } else {
       new_contents = ts_malloc(new_capacity * element_size);
     }

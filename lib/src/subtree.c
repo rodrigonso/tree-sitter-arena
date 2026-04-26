@@ -489,7 +489,12 @@ MutableSubtree ts_subtree_new_node(
   // Allocate the node's data at the end of the array of children.
   size_t new_byte_size = ts_subtree_alloc_size(children->size);
   if (children->capacity * sizeof(Subtree) < new_byte_size) {
-    children->contents = ts_realloc(children->contents, new_byte_size);
+    size_t old_byte_size = children->capacity * sizeof(Subtree);
+    Subtree *new_contents = ts_malloc(new_byte_size);
+    if (children->contents) {
+      memcpy(new_contents, children->contents, old_byte_size);
+    }
+    children->contents = new_contents;
     children->capacity = (uint32_t)(new_byte_size / sizeof(Subtree));
   }
   SubtreeHeapData *data = (SubtreeHeapData *)&children->contents[children->size];
